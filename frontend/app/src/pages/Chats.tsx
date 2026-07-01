@@ -10,6 +10,7 @@ import { useLanguage } from "../contexts/LanguageProvider";
 import {
   AlertCircle,
   ArrowLeft,
+  Bell,
   Image,
   Loader2,
   MessageCircle,
@@ -45,6 +46,11 @@ type ApiErrorResponse = {
   message?: string;
 };
 
+type IncomingNotification = {
+  senderName: string;
+  content: string;
+};
+
 const API_URL = "http://localhost:8080";
 
 export default function Chats() {
@@ -64,12 +70,19 @@ export default function Chats() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const [incomingNotification, setIncomingNotification] =
+    useState<IncomingNotification | null>(null);
 
   const clientRef = useRef<Client | null>(null);
   const subscriptionRef = useRef<ReturnType<Client["subscribe"]> | null>(null);
   const activeConversationIdRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const openingConversationRef = useRef(false);
+
+  const currentUserRef = useRef<ChatUser | null>(null);
+  const selectedUserRef = useRef<ChatUser | null>(null);
+  const messageIdsRef = useRef<Set<number>>(new Set());
+  const notificationTimerRef = useRef<number | null>(null);
 
   const [searchParams] = useSearchParams();
   const targetUserId = Number(searchParams.get("userId"));
@@ -86,6 +99,14 @@ export default function Chats() {
       );
     });
   }, [users, searchValue]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
 
   const getToken = () => {
     return localStorage.getItem("token");
@@ -154,6 +175,120 @@ export default function Chats() {
     };
   };
 
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) return;
+
+    if (Notification.permission === "default") {
+      try {
+        await Notification.requestPermission();
+      } catch (error) {
+        console.log("Cannot request notification permission:", error);
+      }
+    }
+  };
+
+  const playNotificationSound = async () => {
+    try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      const playTone = (
+        frequency: number,
+        startTime: number,
+        duration: number,
+        volume: number
+      ) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, startTime);
+
+        gainNode.gain.setValueAtTime(volume, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      const now = audioContext.currentTime;
+
+      playTone(880, now, 0.16, 0.5);
+      playTone(1175, now + 0.13, 0.18, 0.3);
+
+      setTimeout(() => {
+        audioContext.close().catch(() => {});
+      }, 600);
+    } catch (error) {
+      console.log("Cannot play notification sound:", error);
+    }
+  };
+
+  const showInAppNotification = (newMessage: ChatMessage) => {
+    const senderName =
+      newMessage.user?.name || selectedUserRef.current?.name || t("newMessage");
+
+    setIncomingNotification({
+      senderName,
+      content: newMessage.content,
+    });
+
+    if (notificationTimerRef.current) {
+      window.clearTimeout(notificationTimerRef.current);
+    }
+
+    notificationTimerRef.current = window.setTimeout(() => {
+      setIncomingNotification(null);
+    }, 3500);
+  };
+
+  const showBrowserNotification = (newMessage: ChatMessage) => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (!document.hidden) return;
+
+    const senderName =
+      newMessage.user?.name || selectedUserRef.current?.name || t("newMessage");
+
+    const notification = new Notification(
+      `${t("newMessageFrom")} ${senderName}`,
+      {
+        body: newMessage.content || t("newMessage"),
+        tag: `conversation-${activeConversationIdRef.current}`,
+        silent: true,
+      }
+    );
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  };
+
+  const handleIncomingMessageNotification = (newMessage: ChatMessage) => {
+    const loginUser = currentUserRef.current;
+
+    if (!loginUser) return;
+    if (newMessage.senderId === loginUser.id) return;
+
+    playNotificationSound();
+    showInAppNotification(newMessage);
+    showBrowserNotification(newMessage);
+  };
+
   const subscribeConversation = (selectedConversationId: number) => {
     const client = clientRef.current;
 
@@ -168,13 +303,15 @@ export default function Chats() {
       (message: IMessage) => {
         const newMessage = JSON.parse(message.body) as ChatMessage;
 
-        setMessages((prev) => {
-          const existed = prev.some((item) => item.id === newMessage.id);
+        const existed = messageIdsRef.current.has(newMessage.id);
 
-          if (existed) return prev;
+        if (existed) return;
 
-          return [...prev, newMessage];
-        });
+        messageIdsRef.current.add(newMessage.id);
+
+        handleIncomingMessageNotification(newMessage);
+
+        setMessages((prev) => [...prev, newMessage]);
 
         scrollToBottom();
       }
@@ -235,7 +372,13 @@ export default function Chats() {
       );
     }
 
-    setMessages((data as ChatMessage[]) || []);
+    const loadedMessages = (data as ChatMessage[]) || [];
+
+    messageIdsRef.current = new Set(
+      loadedMessages.map((message) => message.id)
+    );
+
+    setMessages(loadedMessages);
     scrollToBottom();
   };
 
@@ -317,6 +460,7 @@ export default function Chats() {
     setSelectedUser(receiver);
     setConversationId(null);
     setMessages([]);
+    messageIdsRef.current = new Set();
     setError("");
     setIsLoadingMessages(true);
 
@@ -436,15 +580,21 @@ export default function Chats() {
     setSelectedUser(null);
     setConversationId(null);
     setMessages([]);
+    messageIdsRef.current = new Set();
     setError("");
     subscriptionRef.current?.unsubscribe();
   };
 
   useEffect(() => {
+    requestNotificationPermission();
     connectWebSocket();
     fetchUsers();
 
     return () => {
+      if (notificationTimerRef.current) {
+        window.clearTimeout(notificationTimerRef.current);
+      }
+
       subscriptionRef.current?.unsubscribe();
       clientRef.current?.deactivate();
     };
@@ -457,6 +607,34 @@ export default function Chats() {
       </Helmet>
 
       <Header />
+
+      {incomingNotification && (
+        <div
+          className="
+            fixed right-4 top-24 z-50
+            w-[calc(100%-2rem)] max-w-sm
+            rounded-2xl border border-border bg-bg
+            p-4 shadow-[0_18px_50px_rgba(0,0,0,0.18)]
+            animate-[fadeIn_0.2s_ease-out]
+          "
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Bell size={20} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text">
+                {t("newMessageFrom")} {incomingNotification.senderName}
+              </p>
+
+              <p className="mt-1 line-clamp-2 text-sm text-text-secondary">
+                {incomingNotification.content}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="flex-1 min-h-0 overflow-hidden bg-bg-subtle">
         <div className="h-full max-w-7xl mx-auto px-0 lg:px-8 overflow-hidden">

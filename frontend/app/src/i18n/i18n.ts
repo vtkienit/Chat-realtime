@@ -105,6 +105,8 @@ export const translations = {
     connectWithPeopleDesc: "Tìm người dùng, mở cuộc trò chuyện và bắt đầu nhắn tin chỉ trong vài giây.",
     secureChat: "Trò chuyện an toàn",
     secureChatDesc: "Tài khoản và cuộc trò chuyện của bạn được bảo vệ bằng xác thực bảo mật.",
+    newMessage: "Tin nhắn mới",
+    newMessageFrom: "Tin nhắn mới từ",
 
     conversationsTitle: "Đoạn chat",
     searchConversations: "Tìm kiếm cuộc trò chuyện",
@@ -327,6 +329,8 @@ export const translations = {
     cannotChatWithYourself: "Cannot create conversation with yourself",
     websocketNotConnected: "WebSocket is not connected yet.",
     somethingWentWrong: "Something went wrong. Please try again.",
+    newMessage: "New message",
+    newMessageFrom: "New message from",
 
     supportBadge: "Support Center",
     supportTitle: "How can we help you?",

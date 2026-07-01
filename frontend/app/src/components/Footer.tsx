@@ -27,8 +27,8 @@ const Footer = () => {
             <ul className="flex flex-col gap-2 text-text-secondary">
               <li><Link className="hover:text-primary" to="/">{t("home")}</Link></li>
               <li><Link className="hover:text-primary" to="/chats">{t("chats")}</Link></li>
-              <li><Link className="hover:text-primary" to="/">{t("support")}</Link></li>
-              <li><Link className="hover:text-primary" to="/">{t("contact")}</Link></li>
+              <li><Link className="hover:text-primary" to="/support">{t("support")}</Link></li>
+              <li><Link className="hover:text-primary" to="/contact">{t("contact")}</Link></li>
             </ul>
           </div>
 
