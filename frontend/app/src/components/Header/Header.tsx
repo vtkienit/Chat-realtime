@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, Menu, X, LogOut } from "lucide-react";
 import Language from "../../assets/icons/language.svg?react";
