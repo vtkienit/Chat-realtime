@@ -44,13 +44,28 @@ export default function Home() {
     content: ChatUser[];
   };
 
+  const isJwtExpired = (token: string): boolean => {
+    try {
+      const payloadBase64 = token.split(".")[1];
+      const payload = JSON.parse(atob(payloadBase64));
+
+      if (!payload.exp) return true;
+
+      return payload.exp * 1000 < Date.now();
+    } catch {
+      return true;
+    }
+  };
+
   const fetchUsers = async () => {
     const token = localStorage.getItem("token");
     const userJson = localStorage.getItem("user");
 
     let currentUserId: number | null = null;
 
-    if (token && userJson) {
+    const isTokenValid = token && !isJwtExpired(token);
+
+    if (isTokenValid && userJson) {
       try {
         const currentUser = JSON.parse(userJson) as ChatUser;
         currentUserId = currentUser.id;
@@ -63,33 +78,24 @@ export default function Home() {
     setUsersError("");
 
     try {
-      const headers: HeadersInit = token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {};
-
       const response = await fetch(`${API_URL}/api/users?page=0&size=10`, {
         method: "GET",
-        headers,
       });
 
-      const data: ChatUser[] | UsersPageResponse | ApiErrorResponse =
-        await response.json();
+      const data: ChatUser[] | UsersPageResponse | ApiErrorResponse = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          (data as ApiErrorResponse).message || t("cannotLoadUsers")
-        );
+        throw new Error((data as ApiErrorResponse).message || t("cannotLoadUsers"));
       }
 
       const userList = Array.isArray(data)
         ? data
-        : ((data as UsersPageResponse).content || []);
+        : (data as UsersPageResponse).content || [];
 
-      const visibleUsers = currentUserId
-        ? userList.filter((user) => user.id !== currentUserId)
-        : userList;
+      const visibleUsers =
+        currentUserId !== null
+          ? userList.filter((user) => user.id !== currentUserId)
+          : userList;
 
       setUsers(visibleUsers.slice(0, 10));
     } catch (error) {
