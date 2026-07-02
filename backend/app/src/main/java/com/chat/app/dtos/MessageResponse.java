@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class MessageResponse {
     private Long id;
+    Long conversationId;
     private String content;
     private Long senderId;
     private LocalDateTime createdAt;

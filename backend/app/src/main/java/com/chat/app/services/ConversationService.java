@@ -100,6 +100,7 @@ public class ConversationService {
 
                     return new MessageResponse(
                             message.getId(),
+                            conversationId,
                             message.getContent(),
                             message.getSenderId(),
                             message.getCreatedAt(),

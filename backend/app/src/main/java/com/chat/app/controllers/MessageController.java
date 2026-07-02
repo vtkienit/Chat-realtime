@@ -1,7 +1,7 @@
 package com.chat.app.controllers;
 
 import com.chat.app.dtos.MessageRequest;
-import com.chat.app.entities.Message;
+import com.chat.app.dtos.MessageResponse;
 import com.chat.app.exceptions.BaseException;
 import com.chat.app.services.MessageService;
 import lombok.RequiredArgsConstructor;
@@ -11,11 +11,10 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
-import java.security.Principal;
 
 @Controller
 @RequiredArgsConstructor
-public class MessageSocketController {
+public class MessageController {
 
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -27,16 +26,24 @@ public class MessageSocketController {
 
         Long senderId = (Long) authentication.getPrincipal();
 
-        Message saved = messageService.save(
+        MessageResponse saved = messageService.save(
                 conversationId,
                 senderId,
                 request.getContent()
         );
 
-        String destination = "/broadcast/conversations/" + conversationId + "/messages";
+        // Broadcast for opening conversation
+        String conversationDestination =
+                "/broadcast/conversations/" + conversationId + "/messages";
 
-        System.out.println("Broadcasting to: " + destination);
+        messagingTemplate.convertAndSend(conversationDestination, saved);
 
-        messagingTemplate.convertAndSend(destination, saved);
+        // Broadcast notification for receiver
+        Long receiverId = messageService.getReceiverId(conversationId, senderId);
+
+        String notificationDestination =
+                "/broadcast/users/" + receiverId + "/notifications";
+
+        messagingTemplate.convertAndSend(notificationDestination, saved);
     }
 }
