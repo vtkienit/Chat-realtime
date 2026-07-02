@@ -36,6 +36,7 @@ type ConversationResponse = {
 
 type ChatMessage = {
   id: number;
+  conversationId: number;
   content: string;
   senderId: number;
   createdAt: string;
@@ -75,6 +76,7 @@ export default function Chats() {
 
   const clientRef = useRef<Client | null>(null);
   const subscriptionRef = useRef<ReturnType<Client["subscribe"]> | null>(null);
+  const notificationSubscriptionRef = useRef<ReturnType<Client["subscribe"]> | null>(null);
   const activeConversationIdRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const openingConversationRef = useRef(false);
@@ -267,7 +269,7 @@ export default function Chats() {
       `${t("newMessageFrom")} ${senderName}`,
       {
         body: newMessage.content || t("newMessage"),
-        tag: `conversation-${activeConversationIdRef.current}`,
+        tag: `conversation-${newMessage.conversationId}`,
         silent: true,
       }
     );
@@ -318,6 +320,29 @@ export default function Chats() {
     );
   };
 
+  const subscribeNotifications = (loginUser: ChatUser) => {
+    const client = clientRef.current;
+
+    if (!client || !client.connected) return;
+
+    notificationSubscriptionRef.current?.unsubscribe();
+
+    notificationSubscriptionRef.current = client.subscribe(
+      `/broadcast/users/${loginUser.id}/notifications`,
+      (message: IMessage) => {
+        const newMessage = JSON.parse(message.body) as ChatMessage;
+
+        if (newMessage.senderId === loginUser.id) return;
+
+        const isActiveConversation = newMessage.conversationId === activeConversationIdRef.current;
+
+        if (isActiveConversation) return;
+
+        handleIncomingMessageNotification(newMessage);
+      }
+    );
+  };
+
   const connectWebSocket = () => {
     const token = getToken();
 
@@ -331,9 +356,12 @@ export default function Chats() {
         Authorization: `Bearer ${token}`,
       },
       onConnect: () => {
-        if (activeConversationIdRef.current) {
+        const loginUser = currentUserRef.current || getStoredUser();
+
+        if (loginUser) subscribeNotifications(loginUser);
+
+        if (activeConversationIdRef.current) 
           subscribeConversation(activeConversationIdRef.current);
-        }
       },
       onStompError: (frame) => {
         console.error("STOMP error:", frame);
@@ -583,6 +611,7 @@ export default function Chats() {
     messageIdsRef.current = new Set();
     setError("");
     subscriptionRef.current?.unsubscribe();
+    activeConversationIdRef.current = null;
   };
 
   useEffect(() => {
@@ -596,6 +625,7 @@ export default function Chats() {
       }
 
       subscriptionRef.current?.unsubscribe();
+      notificationSubscriptionRef.current?.unsubscribe();
       clientRef.current?.deactivate();
     };
   }, []);
