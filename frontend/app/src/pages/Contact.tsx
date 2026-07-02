@@ -22,7 +22,7 @@ export default function Contact() {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
-  const email = "vtkien,it@gmail.com";
+  const email = "vtkien.it@gmail.com";
 
   return (
     <MainLayout>
